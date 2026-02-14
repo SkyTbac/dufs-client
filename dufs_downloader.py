@@ -15,6 +15,10 @@ from urllib.parse import urljoin
 from urllib.request import urlopen, Request
 from urllib.error import HTTPError, URLError
 
+# ANSI 颜色码
+RED = "\033[91m"
+RESET = "\033[0m"
+
 # 过滤列表：遇到以下文件名时跳过下载，完成后提示用户手动下载
 SKIP_FILENAMES: frozenset[str] = frozenset({
     # 在此添加需要跳过的文件名，例如：
@@ -152,6 +156,7 @@ def download_folder(
     """Recursively download a folder."""
     if skipped_filtered is None:
         skipped_filtered = []
+    folder_skipped: list[str] = []  # 本文件夹内因过滤未下载的文件
     files = collect_files_recursive(base_url, remote_path)
     folder_name = remote_path.rstrip("/").split("/")[-1] or "download"
     target_dir = local_base / folder_name
@@ -161,6 +166,7 @@ def download_folder(
         filename = Path(file_path).name
         if filename in SKIP_FILENAMES:
             skipped_filtered.append(file_path)
+            folder_skipped.append(file_path)
             print(f"  ⊘ skipped (filter): {filename}")
             continue
         if file_path.startswith(prefix):
@@ -176,6 +182,12 @@ def download_folder(
                 print(f"  ✗ failed: {file_path}")
         except Exception as e:
             print(f"  ✗ failed: {file_path}: {e}")
+
+    # 下载完成：若有因过滤未下载的文件，用红色打印
+    if folder_skipped:
+        print(f"\n{RED}The following files were not downloaded due to filter rules, please download manually:{RESET}")
+        for p in folder_skipped:
+            print(f"  {RED}{p}{RESET}")
 
 
 def is_directory(base_url: str, path: str) -> bool:
@@ -226,9 +238,9 @@ def interactive_download(base_url: str, save_dir: Path) -> None:
         except (EOFError, KeyboardInterrupt):
             if skipped_filtered:
                 print("\n" + "=" * 50)
-                print("以下文件因未知原因未下载，请手动下载：")
+                print(f"{RED}The following files were not downloaded due to filter rules, please download manually:{RESET}")
                 for p in skipped_filtered:
-                    print(f"  - {p}")
+                    print(f"  {RED}{p}{RESET}")
                 print("=" * 50)
             print("\nBye!")
             return
@@ -238,9 +250,9 @@ def interactive_download(base_url: str, save_dir: Path) -> None:
         if user_input.lower() in ("q", "quit", "exit"):
             if skipped_filtered:
                 print("\n" + "=" * 50)
-                print("以下文件因未知原因未下载，请手动下载：")
+                print(f"{RED}The following files were not downloaded due to filter rules, please download manually:{RESET}")
                 for p in skipped_filtered:
-                    print(f"  - {p}")
+                    print(f"  {RED}{p}{RESET}")
                 print("=" * 50)
             print("Bye!")
             return
@@ -269,7 +281,7 @@ def interactive_download(base_url: str, save_dir: Path) -> None:
                         else:
                             if name in SKIP_FILENAMES:
                                 skipped_filtered.append(target_path)
-                                print(f"Skipped (filter): {name}")
+                                print(f"{RED}Skipped (filter): {name}{RESET}")
                             else:
                                 local_file = save_dir / name
                                 ok, skipped = download_file(base_url, target_path, local_file)
@@ -296,7 +308,7 @@ def interactive_download(base_url: str, save_dir: Path) -> None:
             try:
                 if name in SKIP_FILENAMES:
                     skipped_filtered.append(target_path)
-                    print(f"Skipped (filter): {name}")
+                    print(f"{RED}Skipped (filter): {name}{RESET}")
                 else:
                     local_file = save_dir / name
                     ok, skipped = download_file(base_url, target_path, local_file)
