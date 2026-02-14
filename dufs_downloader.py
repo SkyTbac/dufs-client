@@ -15,6 +15,15 @@ from urllib.parse import urljoin
 from urllib.request import urlopen, Request
 from urllib.error import HTTPError, URLError
 
+# 过滤列表：遇到以下文件名时跳过下载，完成后提示用户手动下载
+SKIP_FILENAMES: frozenset[str] = frozenset({
+    # 在此添加需要跳过的文件名，例如：
+    # "problematic_file.torrent",
+    # "large_archive.bin",
+    "config.json",
+    ".DS_Store",
+})
+
 
 def normalize_base_url(url: str) -> str:
     """Normalize base URL for direct use."""
@@ -134,14 +143,26 @@ def collect_files_recursive(base_url: str, remote_path: str) -> list[str]:
     return files
 
 
-def download_folder(base_url: str, remote_path: str, local_base: Path) -> None:
+def download_folder(
+    base_url: str,
+    remote_path: str,
+    local_base: Path,
+    skipped_filtered: list[str] | None = None,
+) -> None:
     """Recursively download a folder."""
+    if skipped_filtered is None:
+        skipped_filtered = []
     files = collect_files_recursive(base_url, remote_path)
     folder_name = remote_path.rstrip("/").split("/")[-1] or "download"
     target_dir = local_base / folder_name
     prefix = remote_path.rstrip("/") + "/"
     print(f"Downloading {len(files)} file(s) to {target_dir}")
     for file_path in files:
+        filename = Path(file_path).name
+        if filename in SKIP_FILENAMES:
+            skipped_filtered.append(file_path)
+            print(f"  ⊘ skipped (filter): {filename}")
+            continue
         if file_path.startswith(prefix):
             rel = file_path[len(prefix) :]
         else:
@@ -174,6 +195,7 @@ def is_directory(base_url: str, path: str) -> bool:
 def interactive_download(base_url: str, save_dir: Path) -> None:
     """Interactive download main loop."""
     current_path = ""
+    skipped_filtered: list[str] = []
     while True:
         print("\n" + "=" * 50)
         print(f"Current path: /{current_path}" if current_path else "Current path: / (root)")
@@ -202,12 +224,24 @@ def interactive_download(base_url: str, save_dir: Path) -> None:
         try:
             user_input = input("> ").strip()
         except (EOFError, KeyboardInterrupt):
+            if skipped_filtered:
+                print("\n" + "=" * 50)
+                print("以下文件因未知原因未下载，请手动下载：")
+                for p in skipped_filtered:
+                    print(f"  - {p}")
+                print("=" * 50)
             print("\nBye!")
             return
 
         if not user_input:
             continue
         if user_input.lower() in ("q", "quit", "exit"):
+            if skipped_filtered:
+                print("\n" + "=" * 50)
+                print("以下文件因未知原因未下载，请手动下载：")
+                for p in skipped_filtered:
+                    print(f"  - {p}")
+                print("=" * 50)
             print("Bye!")
             return
 
@@ -231,14 +265,18 @@ def interactive_download(base_url: str, save_dir: Path) -> None:
                 else:
                     try:
                         if is_dir:
-                            download_folder(base_url, target_path, save_dir)
+                            download_folder(base_url, target_path, save_dir, skipped_filtered)
                         else:
-                            local_file = save_dir / name
-                            ok, skipped = download_file(base_url, target_path, local_file)
-                            if ok:
-                                print(f"{'Skipped (exists)' if skipped else 'Downloaded'}: {local_file}")
+                            if name in SKIP_FILENAMES:
+                                skipped_filtered.append(target_path)
+                                print(f"Skipped (filter): {name}")
                             else:
-                                print(f"Download failed: {target_path}")
+                                local_file = save_dir / name
+                                ok, skipped = download_file(base_url, target_path, local_file)
+                                if ok:
+                                    print(f"{'Skipped (exists)' if skipped else 'Downloaded'}: {local_file}")
+                                else:
+                                    print(f"Download failed: {target_path}")
                     except Exception as e:
                         print(f"Download failed: {e}")
             else:
@@ -256,12 +294,16 @@ def interactive_download(base_url: str, save_dir: Path) -> None:
             current_path = target_path
         else:
             try:
-                local_file = save_dir / name
-                ok, skipped = download_file(base_url, target_path, local_file)
-                if ok:
-                    print(f"{'Skipped (exists)' if skipped else 'Downloaded'}: {local_file}")
+                if name in SKIP_FILENAMES:
+                    skipped_filtered.append(target_path)
+                    print(f"Skipped (filter): {name}")
                 else:
-                    print(f"Download failed: {target_path}")
+                    local_file = save_dir / name
+                    ok, skipped = download_file(base_url, target_path, local_file)
+                    if ok:
+                        print(f"{'Skipped (exists)' if skipped else 'Downloaded'}: {local_file}")
+                    else:
+                        print(f"Download failed: {target_path}")
             except Exception as e:
                 print(f"Download failed: {e}")
 
