@@ -12,7 +12,7 @@ A lightweight Python client for downloading files from a [dufs](https://github.c
 
 ## Requirements
 
-- Python 3.x (standard library only, no extra packages)
+- Python >= 3.10 (standard library only, no extra packages)
 - **Recommended:** `wget` or `curl` installed (for progress and speed display during download)
 
 ## Usage
