@@ -1,5 +1,7 @@
 # Dufs Download Client
 
+[English](README.md) | [中文](README.zh-CN.md)
+
 A lightweight Python client for downloading files from a [dufs](https://github.com/sigoden/dufs) file server. Browse the remote directory interactively, download single files, or recursively download entire folders.
 
 ## Features
